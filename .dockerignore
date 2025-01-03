@@ -1,0 +1,10 @@
+__pycache__/
+myenv/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
+*.log
+.git/
+.gitignore
