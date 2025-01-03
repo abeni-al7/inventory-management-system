@@ -145,3 +145,11 @@ SPECTACULAR_SETTINGS = {
     'SWAGGER_UI_FAVICON_HREF': 'SIDECAR',
     'REDOC_DIST': 'SIDECAR',
 }
+
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_HOST = 'smtp.email-provider.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'email@example.com'
+EMAIL_HOST_PASSWORD = 'host-password'
+DEFAULT_FROM_EMAIL = 'Inventory System <inventory-email@example.com>'
