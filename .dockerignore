@@ -7,4 +7,5 @@ myenv/
 *.swo
 *.log
 .git/
+.venv
 .gitignore
