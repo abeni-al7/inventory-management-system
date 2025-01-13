@@ -1,3 +1,5 @@
+import json
+import requests
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_bytes, force_str
@@ -6,8 +8,15 @@ from rest_framework import serializers
 from django.core.mail import send_mail
 from django.conf import settings
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from environs import Env
+
+# Initialize environs
+env = Env()
+env.read_env()  # read .env file, if it exists
 
 User = get_user_model()
+
+email_url = env.str("NOTIFICATION_API_URL") + "/api/send-single-email/"
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -48,13 +57,22 @@ class PasswordResetSerializer(serializers.Serializer):
         uid = urlsafe_base64_encode(force_bytes(user.pk))
         token = default_token_generator.make_token(user)
         reset_url = f"{request.scheme}://{request.get_host()}/accounts/password-reset-confirm/{uid}/{token}/"
-        send_mail(
-            subject="Password Reset",
-            message=f"Use the link below to reset your password:\n{reset_url}",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
+        email_message = "Click the link below to reset your password:\n\n" + reset_url
+        email_subject = "Password Reset"
+        recipients = user.email
+        payload = json.dumps(
+            {
+                "subject": email_subject,
+                "message": email_message,
+                "recipients": recipients,
+            }
         )
-
+        headers = {
+            "Authorization": f"Api-Key {env.str('NOTIFICATION_API_KEY')}",
+            "Content-Type": "application/json",
+        }
+        response = requests.request("POST", email_url, headers=headers, data=payload)
+        print(response.text)
 
 class SetNewPasswordSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
