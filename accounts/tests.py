@@ -2,63 +2,148 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from django.urls import reverse
 from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
+
 
 class UserCRUDAPITestCase(APITestCase):
     def setUp(self):
         self.admin_user = User.objects.create_superuser(
-            username='admin',
-            email='admin@example.com',
-            phone='912345678',
-            password='adminpass123'
+            username="admin",
+            email="admin@example.com",
+            phone="912345678",
+            password="adminpass123",
         )
-        self.client.login(username='admin', password='adminpass123')
+        self.regular_user = User.objects.create_user(
+            username="regularuser",
+            email="regularuser@example.com",
+            phone="912345679",
+            password="userpass123",
+        )
         self.user_data = {
-            'username': 'testuser',
-            'email': 'testuser@example.com',
-            'phone': '912345432',
-            'password': 'testpass123'
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "phone": "912345432",
+            "password": "testpass123",
         }
+
+    def get_jwt_token(self, user):
+        refresh = RefreshToken.for_user(user)
+        return str(refresh.access_token)
 
     def test_create_user(self):
         """Test creating a new user."""
-        url = reverse('user-list')
-        response = self.client.post(url, self.user_data, format='json')
+        url = reverse("user-list")
+        response = self.client.post(url, self.user_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(User.objects.count(), 2)
-        self.assertEqual(User.objects.get(username='testuser').email, 'testuser@example.com')
+        self.assertEqual(User.objects.count(), 3)
+        self.assertEqual(
+            User.objects.get(username="testuser").email, "testuser@example.com"
+        )
 
-    def test_list_users(self):
-        """Test retrieving the list of users."""
-        url = reverse('user-list')
-        response = self.client.get(url, format='json')
+    def test_admin_can_list_users(self):
+        token = self.get_jwt_token(self.admin_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        url = reverse("user-list")
+        response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertGreaterEqual(len(response.data), 1)
 
-    def test_retrieve_user(self):
-        """Test retrieving a single user by ID."""
-        user = User.objects.get(username='admin')
-        url = reverse('user-detail', args=[user.id])
-        response = self.client.get(url, format='json')
+    def test_regular_user_cannot_list_users(self):
+        token = self.get_jwt_token(self.regular_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        url = reverse("user-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_owner_can_update_own_user(self):
+        token = self.get_jwt_token(self.regular_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        url = reverse("user-detail", args=[self.regular_user.id])
+        response = self.client.patch(url, {"email": "newemail@example.com"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['username'], 'admin')
+        self.regular_user.refresh_from_db()
+        self.assertEqual(self.regular_user.email, "newemail@example.com")
 
-    def test_update_user(self):
-        """Test updating an existing user."""
-        user = User.objects.get(username='admin')
-        url = reverse('user-detail', args=[user.id])
-        data = {'username': 'admin_updated', 'email': 'admin_updated@example.com', 'phone': '987654321'}
-        response = self.client.put(url, data, format='json')
+    def test_admin_can_update_any_user(self):
+        token = self.get_jwt_token(self.admin_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        url = reverse("user-detail", args=[self.regular_user.id])
+        response = self.client.patch(url, {"email": "adminupdated@example.com"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        user.refresh_from_db()
-        self.assertEqual(user.username, 'admin_updated')
-        self.assertEqual(user.email, 'admin_updated@example.com')
+        self.regular_user.refresh_from_db()
+        self.assertEqual(self.regular_user.email, "adminupdated@example.com")
 
-    def test_delete_user(self):
-        """Test deleting a user."""
-        user = User.objects.get(username='admin')
-        url = reverse('user-detail', args=[user.id])
-        response = self.client.delete(url, format='json')
+    def test_non_owner_cannot_update_user(self):
+        another_user = User.objects.create_user(
+            username="anotheruser",
+            email="anotheruser@example.com",
+            phone="912345680",
+            password="anotherpass123",
+        )
+        token = self.get_jwt_token(self.regular_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        url = reverse("user-detail", args=[another_user.id])
+        response = self.client.patch(url, {"email": "unauthorized@example.com"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_owner_can_delete_own_user(self):
+        token = self.get_jwt_token(self.regular_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        url = reverse("user-detail", args=[self.regular_user.id])
+        response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertEqual(User.objects.count(), 0)
+        self.assertFalse(User.objects.filter(id=self.regular_user.id).exists())
+
+    def test_admin_can_delete_any_user(self):
+        token = self.get_jwt_token(self.admin_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        url = reverse("user-detail", args=[self.regular_user.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(User.objects.filter(id=self.regular_user.id).exists())
+
+    def test_non_owner_cannot_delete_user(self):
+        another_user = User.objects.create_user(
+            username="anotheruser",
+            email="anotheruser@example.com",
+            phone="912345680",
+            password="anotherpass123",
+        )
+        token = self.get_jwt_token(self.regular_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        url = reverse("user-detail", args=[another_user.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_unauthorized_user_cannot_list_users(self):
+        self.client.credentials()  # Remove any credentials
+        url = reverse("user-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthorized_user_cannot_retrieve_user(self):
+        self.client.credentials()  # Remove any credentials
+        user = User.objects.get(username="admin")
+        url = reverse("user-detail", args=[user.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthorized_user_cannot_update_user(self):
+        self.client.credentials()  # Remove any credentials
+        user = User.objects.get(username="admin")
+        url = reverse("user-detail", args=[user.id])
+        data = {
+            "username": "admin_updated",
+            "email": "admin_updated@example.com",
+            "phone": "987654321",
+        }
+        response = self.client.put(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthorized_user_cannot_delete_user(self):
+        self.client.credentials()  # Remove any credentials
+        user = User.objects.get(username="admin")
+        url = reverse("user-detail", args=[user.id])
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

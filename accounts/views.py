@@ -13,6 +13,9 @@ from .serializers import (
 from django.contrib.auth.tokens import default_token_generator
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from .permissions import IsOwnerOrAdmin
+from .models import User
 
 User = get_user_model()
 
@@ -20,6 +23,13 @@ User = get_user_model()
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+
+    def get_permissions(self):
+        if self.action == "list":
+            self.permission_classes = [IsAuthenticated, IsAdminUser]
+        elif self.action in ["retrieve", "update", "partial_update", "destroy"]:
+            self.permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
+        return super().get_permissions()
 
 
 class PasswordResetView(generics.GenericAPIView):
