@@ -66,7 +66,7 @@ ROOT_URLCONF = "inventory_system.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [os.path.join(BASE_DIR, "templates")],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -86,9 +86,14 @@ WSGI_APPLICATION = "inventory_system.wsgi.application"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
-    "default": env.dj_db_url(
-        "DATABASE_URL", default=f'sqlite:///{BASE_DIR / "db.sqlite3"}'
-    )
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env.str("PG_DB_NAME"),
+        "USER": env.str("PG_DB_USER"),
+        "PASSWORD": env.str("PG_DB_PASSWORD"),
+        "HOST": env.str("PG_DB_HOST"),
+        "PORT": env.str("PG_DB_PORT"),
+    }
 }
 
 

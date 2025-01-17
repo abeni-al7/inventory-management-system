@@ -7,9 +7,11 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 from accounts.views import CustomTokenObtainPairView
+from accounts.views import api_documentation
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("", api_documentation, name="api_documentation"),
     path("", include("accounts.urls")),
     path("token/", CustomTokenObtainPairView.as_view(), name="token_obtain_pair"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),

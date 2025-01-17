@@ -16,6 +16,7 @@ from django.utils.http import urlsafe_base64_decode
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from .permissions import IsOwnerOrAdmin
 from .models import User
+from django.shortcuts import render
 
 User = get_user_model()
 
@@ -93,3 +94,7 @@ class PasswordChangeView(generics.UpdateAPIView):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+
+
+def api_documentation(request):
+    return render(request, 'index.html')
