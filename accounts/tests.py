@@ -44,21 +44,21 @@ class UserCRUDAPITestCase(APITestCase):
 
     def test_admin_can_list_users(self):
         token = self.get_jwt_token(self.admin_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         url = reverse("user-list")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_regular_user_cannot_list_users(self):
         token = self.get_jwt_token(self.regular_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         url = reverse("user-list")
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_owner_can_update_own_user(self):
         token = self.get_jwt_token(self.regular_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         url = reverse("user-detail", args=[self.regular_user.id])
         response = self.client.patch(url, {"email": "newemail@example.com"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -67,7 +67,7 @@ class UserCRUDAPITestCase(APITestCase):
 
     def test_admin_can_update_any_user(self):
         token = self.get_jwt_token(self.admin_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         url = reverse("user-detail", args=[self.regular_user.id])
         response = self.client.patch(url, {"email": "adminupdated@example.com"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -82,14 +82,14 @@ class UserCRUDAPITestCase(APITestCase):
             password="anotherpass123",
         )
         token = self.get_jwt_token(self.regular_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         url = reverse("user-detail", args=[another_user.id])
         response = self.client.patch(url, {"email": "unauthorized@example.com"})
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_owner_can_delete_own_user(self):
         token = self.get_jwt_token(self.regular_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         url = reverse("user-detail", args=[self.regular_user.id])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
@@ -97,7 +97,7 @@ class UserCRUDAPITestCase(APITestCase):
 
     def test_admin_can_delete_any_user(self):
         token = self.get_jwt_token(self.admin_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         url = reverse("user-detail", args=[self.regular_user.id])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
@@ -111,7 +111,7 @@ class UserCRUDAPITestCase(APITestCase):
             password="anotherpass123",
         )
         token = self.get_jwt_token(self.regular_user)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
         url = reverse("user-detail", args=[another_user.id])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -147,3 +147,61 @@ class UserCRUDAPITestCase(APITestCase):
         url = reverse("user-detail", args=[user.id])
         response = self.client.delete(url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_password_change(self):
+        token = self.get_jwt_token(self.regular_user)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        url = reverse("password-change")
+        data = {
+            "old_password": "userpass123",
+            "new_password": "newpass123",
+            "new_password_confirm": "newpass123",
+        }
+        response = self.client.put(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.regular_user.refresh_from_db()
+        self.assertTrue(self.regular_user.check_password("newpass123"))
+
+    def test_password_reset(self):
+        url = reverse("password-reset")
+        data = {
+            "email": self.regular_user.email,
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_password_reset_confirm(self):
+        url = reverse("password-reset")
+        data = {
+            "email": self.regular_user.email,
+        }
+        self.client.post(url, data, format="json")
+
+        # Simulate the token and uid generation
+        from django.utils.http import urlsafe_base64_encode
+        from django.utils.encoding import force_bytes
+        from django.contrib.auth.tokens import default_token_generator
+
+        uid = urlsafe_base64_encode(force_bytes(self.regular_user.pk))
+        token = default_token_generator.make_token(self.regular_user)
+
+        url = reverse("password-reset-confirm", args=[uid, token])
+        data = {
+            "password": "newpass123",
+            "password_confirm": "newpass123",
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.regular_user.refresh_from_db()
+        self.assertTrue(self.regular_user.check_password("newpass123"))
+
+    def test_authentication(self):
+        url = reverse("token_obtain_pair")
+        data = {
+            "email": self.regular_user.email,
+            "password": "userpass123",
+        }
+        response = self.client.post(url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
